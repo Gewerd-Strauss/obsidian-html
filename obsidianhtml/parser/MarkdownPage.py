@@ -545,8 +545,47 @@ class MarkdownPage:
 
                 # Wrap up
                 included_page.RestoreCodeSections()
+            working_copy = self.page  # first off, never change the variable actually used by the program.
+            # because we cannot do a sweeping replace, we need to go through each instance, find out if it is on a newline, and decide upon there.
+            # for the needle, we try matching the matched_link as raw text, and then we look for the preceeding characters.
+            # if we find any, that means we are not in a new line, or the embed is only preceeded by whitespace.
+            for match in re.finditer(".*" + re.escape(matched_link), working_copy):
+                match_span = match.span()
+                needle_length = len(matched_link)
+                bEmbedIsAlone = False  ## initialise the bool
+                bEmbedIsAlone = (match_span[1] - needle_length) == match_span[0]  ## determine if the embed is on its own line or not
+                temp = working_copy[match_span[0] : match_span[1]]
+                # todo: what about indented embeds - like my third case in my testfile? Are they
+                # now that we got each match's position and the original string self.page, we have to expand the match strings to detect the characters preceeding the match
 
-            self.page = self.page.replace(matched_link, "\n" + included_page.page + "\n")
+                # once we got the match's surroundings, we can decide if the title and newlines of 'included_page.page' get stripped (including the embed in-line), or if we put the embed onto a new line.
+                # we could also make some custom format key to detect by if we want to include the section title or not, I guess.
+                # also we need to make this all be a toggle-able feature.
+
+                # put it back together
+                cleaned_page = re.sub("", "", included_page.page)
+                to_be_replaced_needle = working_copy[match_span[0] : match_span[1]]
+                # print("result: \n\n\n\n\n\n\n\n\n", working_copy,"\n\n\n\n\n\n\n\n\n")
+                if bEmbedIsAlone:
+                    working_copy = working_copy.replace(matched_link, "\n" + included_page.page + "\n", 1)
+                else:
+                    replacement = cleaned_page.replace("# " + header, "", 1)  # safety clean-up if this is a level-2 heading or deeper
+                    replacement = re.sub("(\#|\s)+", "", replacement, 1)
+                    replacement = replacement.lstrip()
+                    to_be_replaced_needle = to_be_replaced_needle.replace(matched_link, replacement, 1)
+                    # todo: add setting to trim this whitespace that is currently only used to engage this mode
+                    working_copy = working_copy.replace(temp, to_be_replaced_needle.lstrip(), 1)
+                    # working_copy = working_copy.replace(temp, to_be_replaced_needle, 1)
+
+                # ISSUES: indented embeds are not formatted correctly:
+                # the leading whitespace must be trimmed
+                #  - or we use this as a means of detecting the feature?
+                #
+                # Reconsider the enforced fact that embeds are always prepended a newling if bEmbedIsAlone==true
+                #  - so this would not occur if users put the include at the start of the line
+                # consequentially, as obsidian by default renders embeds with a linebreak above, this might be a
+                # means of controlling for this feature (once we have a toggle for it.)
+            self.page = working_copy
 
             # [425] Add included references as links in graph view
             # add link to frontmatter yaml so that we can add it to the graphview
