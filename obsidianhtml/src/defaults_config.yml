@@ -461,6 +461,7 @@ toggles:
         show_icon: True
       exclude_subfolders:
         - ".git"
+        - ".Rproj.user"
         - "__src"
         - "md"
         - "obs.html"
