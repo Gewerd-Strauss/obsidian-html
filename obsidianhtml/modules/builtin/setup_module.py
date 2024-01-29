@@ -130,10 +130,9 @@ class SetupModule(ObsidianHtmlModule):
         try:
             with open(arguments["config_path"], "r", -1, enc) as f:
                 user_config_yaml = f.read()
-            user_config = yaml.safe_load(user_config_yaml)
         except:
             with open(arguments["config_path"], "r", -1, "utf-16-le") as f:
-            user_config_yaml = f.read()
+                user_config_yaml = f.read()
         user_config = yaml.safe_load(user_config_yaml)
 
         default_config = yaml.safe_load(OpenIncludedFile("defaults_config.yml"))
