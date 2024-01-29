@@ -331,6 +331,9 @@ toggles:
 
   # Will wrap inclusions with <div class="inclusion">{content}</div>
   wrap_inclusions: False
+  
+  # Will strap the header of an inclusion, flush-align content left and embed the inclusion as direct text. 
+  strip_inclusion_headers: False
 
   features:
     styling:
