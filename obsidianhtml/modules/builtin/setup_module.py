@@ -127,8 +127,12 @@ class SetupModule(ObsidianHtmlModule):
         self.store("arguments", arguments)
 
         # get contents of the user config, default_config, and merge them to derive the final config file
-        with open(arguments["config_path"], "r") as f:
-            user_config_yaml = f.read()
+        try:
+            with open(arguments["config_path"], "r", -1, enc) as f:
+                user_config_yaml = f.read()
+        except:
+            with open(arguments["config_path"], "r", -1, "utf-16-le") as f:
+                user_config_yaml = f.read()
         user_config = yaml.safe_load(user_config_yaml)
 
         default_config = yaml.safe_load(OpenIncludedFile("defaults_config.yml"))
