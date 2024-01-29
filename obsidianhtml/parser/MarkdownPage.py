@@ -52,7 +52,6 @@ class MarkdownPage:
         else:
             self.metadata = self.pb.metadata[key]
 
-
     def HasTag(self, ttag):
         tags = self.metadata["tags"]
         for tag in tags:
@@ -545,14 +544,16 @@ class MarkdownPage:
 
                 # Wrap up
                 included_page.RestoreCodeSections()
-
-            included_page.page = f'\n{included_page.page}\n'
-
-            if self.pb.gc("toggles/wrap_inclusions", cached=True):
-                included_page.page = f'\n<div class="inclusion" markdown="1">\n{included_page.page}\n</div>\n'
-
-            self.page = self.page.replace(matched_link, included_page.page)
-
+            for match in re.finditer(".*" + re.escape(matched_link), self.page):
+                if self.pb.gc("toggles/strip_inclusion_headers", cached=True):
+                    self.page = strip_inclusion_headers(included_page.page, matched_link, header, self.page)
+                    continue  # as the code is not compatile with the currently one other extension (which is enabled via `toggles/wrap_inclusions`), we can continue from here.
+                else:
+                    included_page_ = included_page.page
+                if self.pb.gc("toggles/wrap_inclusions", cached=True):
+                    included_page__ = f"\n{included_page_}\n"
+                    included_page__ = f'\n<div class="inclusion" markdown="1">\n{included_page_}\n</div>\n'
+                    self.page = self.page.replace(matched_link, included_page__, 1)
             # [425] Add included references as links in graph view
             # add link to frontmatter yaml so that we can add it to the graphview
             if self.pb.gc("toggles/features/graph/show_inclusions_in_graph"):
@@ -581,3 +582,171 @@ def make_valid_hashpart(hashpart):
         return hashpart
 
     return "h_" + hashpart
+
+
+def strip_inclusion_headers(included_page, link, header, self_page):
+    working_copy = self_page  # first off, never change the variable actually used by the program.
+    # we cannot do a sweeping replace because we need to distinguish embeds which are
+    #   - located flushly at the start of their line (`|` signifies the start of the line):
+    #       |![[note#section]]
+    #   - or on a line which contains non-whitespace characters or only whitespace-characters before the inclusion:
+    #       |  ![[note#section]]
+    #       | This is a line with an inclusion: ![[note#section]]
+    #
+    #
+    # Case 1 should be replaced with the normal note contents, e.g. section including section-title:
+    # In Cases 2 & 3, the include is stripped of its section-header and whitespace preceeding the start of its first line.
+    #
+    # ----
+    # Assume the self_page looks like this (yaml-frontmatter not shown):
+    #
+    # |
+    # |# Header
+    # |
+    # |1: This is a main note, and I want to embed text on a new line:
+    # |![[note#section]]|||
+    # |
+    # |2: This is a main note, and I want to embed text inline which is ![[note#section]]|||
+    # |
+    # |3: Indented:
+    # |        ![[note#section]]|||
+    # |
+    # |# Full-Note
+    # |
+    # |4: This is a main note, and I want to embed text on a new line:
+    # |![[note]]|||
+    # |
+    # |5: This is a main note, and I want to embed text inline which is ![[note]]|||
+    # |
+    # |6: Indented
+    # |        ![[note]]|||
+    # |
+    # |
+    # |
+    # |
+    # |
+    # |
+    #
+    # Assume an included section looks like (yaml-frontmatter not shown):
+    #
+    # |
+    # |This is a child note
+    # |
+    # |# section
+    # |
+    # |# A Section
+    # |
+    # |containing words.
+    # |And a paragraph starting on the next line. yay.
+    # |
+    # |And another one.
+    # |
+    # |# A second section
+    # |
+    # |**containing different words**
+    # |
+    # |And another paragraph, but with a real double-newline-break inbetween.
+    # |Whee.
+    # |Yea, this is the end, I guess.
+    # |
+    #
+    # ----
+    #
+    # This will be the resulting content:
+    #
+    # |# Header
+    # |
+    # |1: This is a main note, and I want to embed text on a new line:
+    # |
+    # |# A Section
+    # |containing words
+    # |
+    # ||||
+    # |
+    # |2: This is a main note, and I want to embed text inline which is containing words
+    # ||||
+    # |
+    # |3: Indented:
+    # |containing words
+    # ||||
+    # |
+    # |# Full-Note
+    # |
+    # |4: This is a main note, and I want to embed text on a new line:
+    # |
+    # |
+    # |
+    # |This is a child note
+    # |
+    # |# A Section
+    # |
+    # |containing words
+    # |
+    # |# A secondsection
+    # |
+    # |**containing different words**
+    # |
+    # ||||
+    # |
+    # |5: This is a main note, and I want to embed text inline which is This is a child note
+    # |
+    # |A Section
+    # |
+    # |containing words
+    # |
+    # |# A second section
+    # |
+    # |**containing different words**
+    # ||||
+    # |
+    # |6: Indented
+    # |This is a child note
+    # |
+    # |A Section
+    # |
+    # |containing words
+    # |
+    # |# A second section
+    # |
+    # |**containing different words**
+    # ||||
+    # |
+    #
+    # ---
+    #
+    #
+    # because we cannot do a sweeping replace, we need to go through each instance, find out if it is on a newline, and decide upon there.
+    # for the needle, we try matching the matched_link as raw text, and then we look for the preceeding characters.
+    # if we find any preceeding characters, that means we are not in a new line, or the embed is only preceeded by whitespace.
+    for match in re.finditer(".*" + re.escape(link), self_page):
+        match_span = match.span()
+        needle_length = len(link)
+        bEmbedIsAlone = False  ## initialise the bool
+        bEmbedIsAlone = (match_span[1] - needle_length) == match_span[0]  ## determine if the embed is on its own line or not
+        temp = working_copy[match_span[0] : match_span[1]]
+        # now that we got each match's position and the original string self.page, we have to expand the match strings to detect the characters preceeding the match
+
+        # once we got the match's surroundings, we can decide if the title and newlines of 'included_page.page' get stripped (including the embed in-line), or if we put the embed onto a new line.
+        # we could also make some custom format key to detect by if we want to include the section title or not, I guess.
+
+        # put it back together
+        cleaned_page = re.sub("", "", included_page)
+        to_be_replaced_needle = working_copy[match_span[0] : match_span[1]]
+        if bEmbedIsAlone:
+            working_copy = working_copy.replace(link, f"\n{included_page}\n", 1)
+        else:
+            replacement = cleaned_page.replace("# " + header, "", 1)  # safety clean-up if this is a level-2 heading or deeper
+            replacement = re.sub("(\#|\s)+", "", replacement, 1)
+            replacement = replacement.lstrip()
+            to_be_replaced_needle = to_be_replaced_needle.replace(link, replacement, 1)
+            working_copy = working_copy.replace(temp, to_be_replaced_needle.lstrip(), 1)
+
+        # ISSUES: indented embeds are not formatted correctly:
+        # the leading whitespace must be trimmed
+        #  - or we use this as a means of detecting the feature?
+        #
+        # Reconsider the enforced fact that embeds are always prepended a newling if bEmbedIsAlone==true
+        #  - so this would not occur if users put the include at the start of the line
+        # consequentially, as obsidian by default renders embeds with a linebreak above, this might be a
+        # means of controlling for this feature (once we have a toggle for it.)
+    return working_copy
