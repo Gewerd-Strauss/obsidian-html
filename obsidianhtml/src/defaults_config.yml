@@ -462,6 +462,7 @@ toggles:
       exclude_subfolders:
         - ".git"
         - ".Rproj.user"
+        - ".obsidian"
         - "__src"
         - "md"
         - "obs.html"
