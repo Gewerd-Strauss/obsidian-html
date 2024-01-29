@@ -91,6 +91,24 @@ class VaultCopyModule(ObsidianHtmlModule):
         target_folder_path = paths["obsidian_folder"]
         for file in files:
             src_path = Path(file)
+            skip = False
+            i = 0
+            for part in src_path.parts:
+                lngth = len(src_path.parts)  # get the number of parts in the src_path
+                i = i + 1
+                if part.count(".") > 1:
+                    if i == lngth:  ## we are at the end of the src_path, and this hit is a filename with 2+ dots, f.e. '.Rproj.user'
+                        if self.verbose_enough("debug", self.verbosity):
+                            print("warn: do we need to exclude filenames with multiple dots?")
+                    if self.verbose_enough("debug", self.verbosity):
+                        print("warn: folder considered a file:'" + file + "'\ndue to infringing path-section '" + part + "'")
+                    skip = True
+            if skip:
+                continue
+            for part in src_path.parts:
+                if part.count(".") > 1:
+                    print("Error: folder considered a file")
+                    skip = True
             rel_path = src_path.relative_to(source_folder_path)
             dst_path = target_folder_path.joinpath(rel_path)
 
