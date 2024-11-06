@@ -128,13 +128,23 @@ class SetupModule(ObsidianHtmlModule):
 
         # get contents of the user config, default_config, and merge them to derive the final config file
         try:
-            with open(arguments["config_path"], "r", -1, "utf-16-le") as f:
+            with open(arguments["config_path"], "rb", -1) as f:
                 user_config_yaml = f.read()
-        except:
-            with open(arguments["config_path"], "r", -1, "utf-8") as f:
-                user_config_yaml = f.read()
-        user_config = yaml.safe_load(user_config_yaml)
-
+            user_config = yaml.safe_load(user_config_yaml)
+        except Exception as error:
+            try:
+                print(f"Loading and parsing the user-config in binary-format failed: {error}\nAttempting to load as utf-16-le.")
+                with open(arguments["config_path"], "r", -1, "utf-16-le") as f:
+                    user_config_yaml = f.read()
+                user_config = yaml.safe_load(user_config_yaml)
+            except Exception as error:
+                try:
+                    print(f"Loading and parsing the user-config with utf-16-le-encoding failed: {error}\nAttempting to load as utf-8.")
+                    with open(arguments["config_path"], "r", -1, "utf-8") as f:
+                        user_config_yaml = f.read()
+                    user_config = yaml.safe_load(user_config_yaml)
+                except Exception as error:
+                    raise Exception(f"Config-file {arguments["config_path"]} could not be loaded and parsed via binary-mode, nor with encodings 'utf-16-le' or 'utf-8'.")
         default_config = yaml.safe_load(OpenIncludedFile("defaults_config.yml"))
         config = self.store("config", MergeDictRecurse(default_config, user_config))
 
